@@ -71,6 +71,10 @@ class Strategy:
                 optimizer = optim.Adam(self.clf.parameters(), lr = self.args['lr'], weight_decay=0)
 
     def predict(self, X, Y):
+        def weight_reset(m):
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                m.reset_parameters()
+
         if type(X) is np.ndarray:
             loader_te = DataLoader(self.handler(X, Y, transform=self.args['transformTest']),
                             shuffle=False, **self.args['loader_te_args'])
