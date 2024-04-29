@@ -13,6 +13,26 @@ def get_dataset(name, path):
         return get_SVHN(path)
     elif name == 'CIFAR10':
         return get_CIFAR10(path)
+    elif name == 'FILE':
+        return get_FILE(path)
+
+def get_FILE(path):
+    mnist = get_MNIST(path)
+
+    data = np.load("./dat.npz")
+
+    X_tr = torch.from_numpy(data['data']).float()
+    Y_tr = torch.max(torch.from_numpy(data['label']), 1)[1]
+
+    X_te = torch.tensor([], dtype=float)
+    Y_te = torch.tensor([], dtype=float)
+
+    # TODO this is just here for testing
+    # X_te = X_tr
+    # Y_te = Y_tr
+
+    return X_tr, Y_tr, X_te, Y_te
+
 
 def get_MNIST(path):
     raw_tr = datasets.MNIST(path + '/MNIST', train=True, download=True)

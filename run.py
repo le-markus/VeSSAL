@@ -65,7 +65,15 @@ args_pool = {'MNIST':
                  'loader_te_args':{'batch_size': 1000, 'num_workers': 1},
                  'optimizer_args':{'lr': 0.05, 'momentum': 0.3},
                  'transformTest': transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616))])},
-                }
+             'FILE':
+             {
+                'transform': transforms.Compose([]),
+                'loader_tr_args': {'batch_size': 64, 'num_workers': 1},
+                'loader_te_args': {'batch_size': 64, 'num_workers': 1},
+                'transformTest': {},
+
+             }
+             }
 
 opts.nClasses = 10
 args_pool['CIFAR10']['transform'] =  args_pool['CIFAR10']['transformTest'] # remove data augmentation
