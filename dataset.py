@@ -17,8 +17,6 @@ def get_dataset(name, path):
         return get_FILE(path)
 
 def get_FILE(path):
-    mnist = get_MNIST(path)
-
     data = np.load("./dat.npz")
 
     X_tr = torch.from_numpy(data['data']).float()
