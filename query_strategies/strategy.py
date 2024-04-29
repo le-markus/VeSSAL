@@ -78,6 +78,11 @@ class Strategy:
             loader_te = DataLoader(self.handler(X.numpy(), Y, transform=self.args['transformTest']),
                             shuffle=False, **self.args['loader_te_args'])
 
+        # To allow prediction without having trained, initial nn if it is not yet
+        if not hasattr(self, 'clf'):
+            self.clf = self.args['pretrained_resnet']().cuda() if self.args['net_type'] == 'pretrained' else self.net.apply(weight_reset).cuda()
+
+
         self.clf.eval()
         P = torch.zeros(len(Y)).long()
         with torch.no_grad():
