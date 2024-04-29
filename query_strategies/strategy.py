@@ -51,7 +51,6 @@ class Strategy:
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
                 m.reset_parameters()
 
-        n_epoch = self.args['n_epoch']
         if self.args['net_type'] == 'pretrained': self.clf = self.args['pretrained_resnet']().cuda()
         else: self.clf =  self.net.apply(weight_reset).cuda()
         optimizer = optim.Adam(self.clf.parameters(), lr = self.args['lr'], weight_decay=0)
