@@ -208,10 +208,12 @@ acc[0] = 1.0 * (Y_te == P).sum().item() / len(Y_te)
 print(str(opts.nStart) + '\ttesting accuracy {}'.format(acc[0]), flush=True)
 
 scan_per_round = (len(X_tr) - NUM_INIT_LB) // NUM_ROUND
-strategy.allowed = np.zeros(strategy.n_pool, dtype=bool)
+strategy_allowed_orig = np.zeros(strategy.n_pool, dtype=bool)
+strategy.allowed = strategy_allowed_orig.copy()
 for rd in range(1, NUM_ROUND+1):
     if opts.single_pass:
-        strategy.allowed[rd*scan_per_round: (rd+1)*scan_per_round] = True 
+       strategy.allowed = strategy_allowed_orig.copy()
+       strategy.allowed[rd*scan_per_round: (rd+1)*scan_per_round] = True
     print('Round {}'.format(rd), flush=True)
 
     # query
