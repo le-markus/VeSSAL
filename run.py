@@ -193,6 +193,16 @@ else:
     print('choose a valid acquisition function', flush=True)
     raise ValueError
 
+# In case of single passs we can use prequential evaluation
+# http://svn.apache.org/repos/asf//incubator/samoa/site/documentation/Prequential-Evaluation-Task.html
+prequential_eval= False
+if opts.single_pass and len(Y_te) == 0:
+   prequential_eval = True
+   acc_preq = np.zeros_like(Y_tr)
+   print("Using prequential Evaluation for Accuracy")
+
+acc = np.zeros(NUM_ROUND+1)
+
 get_pretrained = lambda : pretrained(nClasses=opts.nClasses)
 args['pretrained_resnet'] = get_pretrained
 args['net_type'] = opts.model
@@ -200,20 +210,34 @@ args['net_type'] = opts.model
 print(DATA_NAME, flush=True)
 print(type(strategy).__name__, flush=True)
 
+if prequential_eval and NUM_INIT_LB:
+   acc_current = Y_tr[:NUM_INIT_LB] == strategy.predict(X_tr[:NUM_INIT_LB], Y_tr[:NUM_INIT_LB])
+   acc[0] = acc_current.sum() / NUM_INIT_LB
+   acc_preq[:NUM_INIT_LB] = acc_current
+
 # round 0 accuracy
 strategy.train()
 P = strategy.predict(X_te, Y_te)
-acc = np.zeros(NUM_ROUND+1)
-acc[0] = 1.0 * (Y_te == P).sum().item() / len(Y_te)
+
+if not prequential_eval:
+   acc[0] = 1.0 * (Y_te == P).sum().item() / len(Y_te)
+
 print(str(opts.nStart) + '\ttesting accuracy {}'.format(acc[0]), flush=True)
 
 scan_per_round = (len(X_tr) - NUM_INIT_LB) // NUM_ROUND
 strategy_allowed_orig = np.zeros(strategy.n_pool, dtype=bool)
 strategy.allowed = strategy_allowed_orig.copy()
+
+print(f"NUM_ROUND {NUM_ROUND}")
 for rd in range(1, NUM_ROUND+1):
     if opts.single_pass:
        strategy.allowed = strategy_allowed_orig.copy()
        strategy.allowed[rd*scan_per_round: (rd+1)*scan_per_round] = True
+
+       if prequential_eval:
+          acc_current = Y_tr[strategy.allowed] == strategy.predict(X_tr[strategy.allowed], Y_tr[strategy.allowed])
+          acc[rd] = 1.0 * acc_current.sum() / strategy.allowed.sum()
+          acc_preq[strategy.allowed] = acc_current
     print('Round {}'.format(rd), flush=True)
 
     # query
@@ -232,7 +256,12 @@ for rd in range(1, NUM_ROUND+1):
 
     # round accuracy
     P = strategy.predict(X_te, Y_te)
-    acc[rd] = 1.0 * (Y_te == P).sum().item() / len(Y_te)
+    if not prequential_eval:
+       acc[rd] = 1.0 * (Y_te == P).sum().item() / len(Y_te)
+
     print(str(sum(idxs_lb)) + '\t' + 'testing accuracy {}'.format(acc[rd]), flush=True)
     if sum(~strategy.idxs_lb) < opts.nQuery: 
         sys.exit('too few remaining points to query')
+
+# Store prequential evaluation results
+np.savetxt(f"./acc_vessal_prequential_0.csv", acc_preq, delimiter=',', fmt='%.5f')
