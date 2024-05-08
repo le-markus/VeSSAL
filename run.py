@@ -47,6 +47,7 @@ NUM_INIT_LB = opts.nStart
 NUM_QUERY = opts.nQuery
 NUM_ROUND = int((opts.nEnd - NUM_INIT_LB)/ opts.nQuery)
 DATA_NAME = opts.data
+DATA_PATH = opts.path if DATA_NAME != "FILE" else "dat.npz"
 
 # non-openml data defaults
 args_pool = {'MNIST':
@@ -84,8 +85,7 @@ args_pool['SVHN']['transformTest'] = args_pool['SVHN']['transform']
 if not os.path.exists(opts.path):
     os.makedirs(opts.path)
 
-
-X_tr, Y_tr, X_te, Y_te = get_dataset(DATA_NAME, opts.path)
+X_tr, Y_tr, X_te, Y_te = get_dataset(DATA_NAME, DATA_PATH)
 opts.dim = np.shape(X_tr)[1:]
 handler = get_handler(opts.data)
 

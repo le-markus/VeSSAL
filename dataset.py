@@ -16,14 +16,18 @@ def get_dataset(name, path):
     elif name == 'FILE':
         return get_FILE(path)
 
-def get_FILE(path):
-    data = np.load("./dat.npz")
+    else:
+        print("Unknown Dataset name")
+        exit(-1)
+
+def get_FILE(path: str = "./dat.npz"):
+    data = np.load(path)
 
     X_tr = torch.from_numpy(data['data']).float()
     Y_tr = torch.max(torch.from_numpy(data['label']), 1)[1]
 
-    X_te = torch.tensor([], dtype=float)
-    Y_te = torch.tensor([], dtype=float)
+    X_te = torch.tensor([], dtype=torch.float)
+    Y_te = torch.tensor([], dtype=torch.float)
 
     # TODO this is just here for testing
     # X_te = X_tr
