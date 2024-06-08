@@ -33,6 +33,11 @@ def get_FILE(path: str = "./dat.npz"):
     # X_te = X_tr
     # Y_te = Y_tr
 
+    # Reduce the dataset size to help testing during development
+    if os.getenv("DEBUG_ENABLED") == "1":
+        X_tr = X_tr[:2000]
+        Y_tr = Y_tr[:2000]
+
     return X_tr, Y_tr, X_te, Y_te
 
 

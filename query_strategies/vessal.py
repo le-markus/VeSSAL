@@ -9,11 +9,12 @@ import time
 class StreamingSampling(Strategy):
     def __init__(self, X, Y, idxs_lb, net, handler, args):
         super(StreamingSampling, self).__init__(X, Y, idxs_lb, net, handler, args)
-        self.skipped = []
+        self.skipped = torch.tensor([], dtype=torch.int, device=self.device)
 
         if self.args["data"] == 'CLOW' or self.args["data"] == 'clip':
             self.transformer = GaussianRandomProjection(n_components=2560)
         self.zeta = self.args["zeta"]
+
 
     # just in case values get too big, sometimes happens
     def inf_replace(self, mat):
@@ -69,7 +70,8 @@ class StreamingSampling(Strategy):
 
 
     def get_valid_candidates(self):
-        skipped = np.zeros(self.n_pool, dtype=bool)
+        skipped = torch.zeros(self.n_pool, dtype=torch.bool, device=self.device)
+
         skipped[self.skipped] = True
         if self.args["single_pass"]:
             valid = ~self.idxs_lb & ~skipped & self.allowed 
@@ -81,14 +83,15 @@ class StreamingSampling(Strategy):
     def query(self, n):#, num_round=0):
 
         valid = self.get_valid_candidates()
-        idxs_unlabeled = np.arange(self.n_pool)[valid]
+        idxs_unlabeled = torch.arange(self.n_pool, device=self.device)[valid]
+        
 
         rank = self.args["rank"]
         if self.args["embs"] == "penultimate":
             gradEmbedding = self.get_embedding(self.X[idxs_unlabeled], self.Y.numpy()[idxs_unlabeled]).numpy()
             # print('pen embedding shape: {}'.format(gradEmbedding.shape))
         else:
-            gradEmbedding = self.get_exp_grad_embedding(self.X[idxs_unlabeled], self.Y.numpy()[idxs_unlabeled], rank=rank).numpy()
+            gradEmbedding = self.get_exp_grad_embedding(self.X[idxs_unlabeled.to("cpu")], self.Y.numpy()[idxs_unlabeled.to("cpu")], rank=rank).numpy()
             # print('gradient embedding shape: {}'.format(gradEmbedding.shape))
 
         early_stop = self.args["early_stop"] 
@@ -104,18 +107,18 @@ class StreamingSampling(Strategy):
         # If more than n samples were selected, take the first n.
         if len(chosen) > n:
             chosen = chosen[:n]
-
-        self.skipped.extend(idxs_unlabeled[skipped])
+        
+        self.skipped = torch.cat((self.skipped, idxs_unlabeled[skipped]), dim=0)
 
         result = idxs_unlabeled[chosen]
         if self.args["fill_random"]:
             # If less than n samples where selected, fill is with random samples.
             if len(chosen) < n:
-                labelled = np.copy(self.idxs_lb)
+                labelled = torch.clone(self.idxs_lb)
                 labelled[idxs_unlabeled[chosen]] = True
-                remaining_unlabelled = np.arange(self.n_pool)[~labelled]
+                remaining_unlabelled = torch.arange(self.n_pool, device=self.device)[~labelled]
                 n_random = n - len(chosen)
                 fillers = remaining_unlabelled[np.random.permutation(len(remaining_unlabelled))][:n_random]
-                result = np.concatenate([idxs_unlabeled[chosen], fillers], axis=0)
+                result = torch.cat((idxs_unlabeled[chosen], fillers), axis=0)
 
         return result

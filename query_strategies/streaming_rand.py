@@ -3,18 +3,17 @@ from numpy.random import default_rng
 from .vessal import StreamingSampling
 import pdb
 import os
-
+import torch
 
 class StreamingRand(StreamingSampling):
     def __init__(self, X, Y, idxs_lb, net, handler, args):
         super(StreamingRand, self).__init__(X, Y, idxs_lb, net, handler, args)
-        self.skipped = []
         self.rng = default_rng()
 
     def query(self, n):
         valid = self.get_valid_candidates()
-        idxs_unlabeled = np.arange(self.n_pool)[valid]
-        chosen, skipped = self.streaming_sampler(self.X[idxs_unlabeled], n, self.args["early_stop"], self.args["deterministic"])
+        idxs_unlabeled = torch.arange(self.n_pool, device=self.device)[valid]
+        chosen, skipped = self.streaming_sampler(self.X[idxs_unlabeled.to("cpu")], n, self.args["early_stop"], self.args["deterministic"])
         print(len(idxs_unlabeled), len(chosen))
         print('chosen: {}, skipped: {}, n:{}'.format(len(chosen),len(skipped),n))
 
@@ -22,18 +21,18 @@ class StreamingRand(StreamingSampling):
         if len(chosen) > n:
             chosen = chosen[:n]
 
-        self.skipped.extend(idxs_unlabeled[skipped])
+        self.skipped = torch.cat((self.skipped, idxs_unlabeled[skipped]), dim=0)
 
         result = idxs_unlabeled[chosen]
         if self.args["fill_random"]:
             # If less than n samples where selected, fill is with random samples.
             if len(chosen) < n:
-                labelled = np.copy(self.idxs_lb)
+                labelled = torch.clone(self.idxs_lb)
                 labelled[idxs_unlabeled[chosen]] = True
-                remaining_unlabelled = np.arange(self.n_pool)[~labelled]
+                remaining_unlabelled = torch.arange(self.n_pool, device=self.device)[~labelled]
                 n_random = n - len(chosen)
                 fillers = remaining_unlabelled[np.random.permutation(len(remaining_unlabelled))][:n_random]
-                result = np.concatenate([idxs_unlabeled[chosen], fillers], axis=0)
+                result = torch.cat((idxs_unlabeled[chosen], fillers), axis=0)
 
         return result
 

@@ -18,6 +18,9 @@ class Strategy:
         self.n_pool = len(Y)
         use_cuda = torch.cuda.is_available()
 
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
     def query(self, n):
         pass
 
@@ -55,8 +58,8 @@ class Strategy:
         else: self.clf =  self.net.apply(weight_reset).cuda()
         optimizer = optim.Adam(self.clf.parameters(), lr = self.args['lr'], weight_decay=0)
 
-        idxs_train = np.arange(self.n_pool)[self.idxs_lb]
-        loader_tr = DataLoader(self.handler(self.X[idxs_train], torch.Tensor(self.Y.numpy()[idxs_train]).long(), transform=self.args['transform']), shuffle=True, **self.args['loader_tr_args'])
+        idxs_train = torch.arange(self.n_pool, device="cuda")[self.idxs_lb]
+        loader_tr = DataLoader(self.handler(self.X[idxs_train.to("cpu")], torch.Tensor(self.Y.numpy()[idxs_train.to("cpu")]).long(), transform=self.args['transform']), shuffle=True, **self.args['loader_tr_args'])
    
         epoch = 1
         accCurrent = 0.

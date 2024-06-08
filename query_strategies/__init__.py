@@ -4,3 +4,4 @@ from .least_confidence import LeastConfidence
 from .core_set import CoreSet
 from .badge_sampling  import BadgeSampling
 from .streaming_rand import StreamingRand
+from .streaming_rand_torch import StreamingRandTorch

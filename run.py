@@ -12,7 +12,7 @@ from torchvision import transforms
 import torch
 from query_strategies import RandomSampling, BadgeSampling, \
                             StreamingSampling, LeastConfidence, \
-                            CoreSet, StreamingRand
+                            CoreSet, StreamingRand, StreamingRandTorch
 
 def make_choices_help(choices):
    return '[' + ', '.join(choices) + ']'
@@ -42,12 +42,25 @@ parser.add_argument('--activation', help=make_choices_help(['square','relu','sig
 
 opts = parser.parse_args()
 
+
+#Enable offloading to device
+# (This flag is not always respected)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 # parameters
-NUM_INIT_LB = opts.nStart
-NUM_QUERY = opts.nQuery
-NUM_ROUND = int((opts.nEnd - NUM_INIT_LB)/ opts.nQuery)
-DATA_NAME = opts.data
-DATA_PATH = opts.path if DATA_NAME != "FILE" else "dat.npz"
+NUM_INIT_LB = opts.nStart # Initial training pool size
+NUM_QUERY = opts.nQuery # Number of points to query in a batch
+
+if not os.getenv("DEBUG_ENABLED") == "1":
+    # TODO
+    # I think this makes assumptions about the dataset and should be replaced 
+    NUM_ROUND = int((opts.nEnd - NUM_INIT_LB)/ opts.nQuery) 
+else:
+    # This is for testing
+    NUM_ROUND =  10
+
+DATA_NAME = opts.data # Data set name
+DATA_PATH = opts.path if DATA_NAME != "FILE" else "dat.npz" # filename if it is from from a file
 
 # non-openml data defaults
 args_pool = {'MNIST':
@@ -101,12 +114,11 @@ print('number of unlabeled pool: {}'.format(n_pool - NUM_INIT_LB), flush=True)
 print('number of testing pool: {}'.format(n_test), flush=True)
 
 # generate initial labeled pool
-idxs_lb = np.zeros(n_pool, dtype=bool)
+idxs_lb = torch.zeros((n_pool,), dtype=torch.bool, device=device)
 idxs_tmp = np.arange(n_pool)
-np.random.shuffle(idxs_tmp)
 idxs_lb[idxs_tmp[:NUM_INIT_LB]] = True
-
 # mlp model class
+
 class mlpMod(nn.Module):
     def __init__(self, dim, embSize=256):
         super(mlpMod, self).__init__()
@@ -164,6 +176,8 @@ args['activation'] = opts.activation
 args['embs'] = opts.embs
 args["deterministic"] = opts.deterministic
 
+if args["deterministic"]:
+   torch.random.manual_seed(42)
 
 # Sort the data by first PC to simulate domain shift.
 if args["sort_by_pc"]:
@@ -183,6 +197,9 @@ elif opts.alg == 'conf': # confidence-based sampling (baseline)
     strategy = LeastConfidence(X_tr, Y_tr, idxs_lb, net, handler, args)
 elif opts.alg == "stream_rand": # uniform stream sampling (streaming baseline)
     strategy = StreamingRand(X_tr, Y_tr, idxs_lb, net, handler, args)
+elif opts.alg == "stream_rand_torch":
+   strategy = StreamingRandTorch(X_tr, Y_tr, idxs_lb, net, handler, args)
+   strategy_alt_int = True
 elif opts.alg == 'badge': # batch active learning by diverse gradient embeddings (SoTA)
     strategy = BadgeSampling(X_tr, Y_tr, idxs_lb, net, handler, args)
 elif opts.alg == 'coreset': # coreset sampling (basline)
@@ -225,30 +242,41 @@ if not prequential_eval:
 print(str(opts.nStart) + '\ttesting accuracy {}'.format(acc[0]), flush=True)
 
 scan_per_round = (len(X_tr) - NUM_INIT_LB) // NUM_ROUND
-strategy_allowed_orig = np.zeros(strategy.n_pool, dtype=bool)
-strategy.allowed = strategy_allowed_orig.copy()
+strategy_allowed_orig = torch.zeros((strategy.n_pool), dtype=torch.bool, device=device)
+strategy.allowed = strategy_allowed_orig.clone()
+
+# Map data to torch
+
+
+
+
+# Offload data to device
+idxs_lb = idxs_lb.to(device)
+
 
 print(f"NUM_ROUND {NUM_ROUND}")
 for rd in range(1, NUM_ROUND+1):
     if opts.single_pass:
-       strategy.allowed = strategy_allowed_orig.copy()
+       strategy.allowed = strategy_allowed_orig.clone()
        strategy.allowed[rd*scan_per_round: (rd+1)*scan_per_round] = True
+       strategy_allowed_cpu = strategy.allowed.cpu()
 
        if prequential_eval:
-          acc_current = Y_tr[strategy.allowed] == strategy.predict(X_tr[strategy.allowed], Y_tr[strategy.allowed])
+          acc_current = Y_tr[strategy_allowed_cpu] == strategy.predict(X_tr[strategy_allowed_cpu], Y_tr[strategy_allowed_cpu])
           acc[rd] = 1.0 * acc_current.sum() / strategy.allowed.sum()
-          acc_preq[strategy.allowed] = acc_current
+          acc_preq[strategy.allowed.cpu()] = acc_current
     print('Round {}'.format(rd), flush=True)
 
     # query
     output = strategy.query(NUM_QUERY)#, rd)
-    q_idxs = output
+    q_idxs = output.cpu()
     if len(q_idxs) == 0:
         break
-    idxs_lb[q_idxs] = True
+    idxs_lb[q_idxs.cpu()] = True
 
     # report weighted accuracy
     corr = (strategy.predict(X_tr[q_idxs], torch.Tensor(Y_tr.numpy()[q_idxs]).long())).numpy() == Y_tr.numpy()[q_idxs]
+
 
     # update
     strategy.update(idxs_lb)
@@ -264,4 +292,18 @@ for rd in range(1, NUM_ROUND+1):
         sys.exit('too few remaining points to query')
 
 # Store prequential evaluation results
-np.savetxt(f"./acc_vessal_prequential_0.csv", acc_preq, delimiter=',', fmt='%.5f')
+
+import json
+import time
+result = {}
+result['NUM_ROUND'] = NUM_ROUND
+
+
+
+result['acc_preq'] = acc_preq.tolist()
+result['strategy_queried'] = idxs_lb.tolist()
+
+
+# get timecode for result-tracking file
+timecode = time.strftime("%Y%m%d-%H%M%S")
+json.dump(result, open(f'./results/{timecode}-results.json','w'))
